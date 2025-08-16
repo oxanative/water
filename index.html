@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>粒子の流れる物理シミュレーション</title>
+    <style>
+        body { margin: 0; background: #222; }
+        canvas { display: block; margin: 0 auto; background: #111; }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+    const particles = [];
+    let gravityMag = 0.35;
+    let gravityAngle = Math.PI / 2; // 初期は下向き
+    function getGravity() {
+        return {
+            x: Math.cos(gravityAngle) * gravityMag,
+            y: Math.sin(gravityAngle) * gravityMag
+        };
+    }
+    const PARTICLE_COUNT = 220;
+    let mouse = { x: null, y: null };
+
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = Math.random() * 2;
+                this.radius = 3 + Math.random() * 2;
+                this.color = '#66ccff';
+            }
+            update(index) {
+                // マウスの近くなら離れる力を加える
+                if (mouse.x !== null && mouse.y !== null) {
+                    const dx = this.x - mouse.x;
+                    const dy = this.y - mouse.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = 180; // 判定距離を大きく
+                    if (dist < minDist) {
+                        // const force = (minDist - dist) * 0.08;
+                        const force = (minDist - dist) * 0.01;
+                        const angle = Math.atan2(dy, dx);
+                        this.vx += Math.cos(angle) * force;
+                        this.vy += Math.sin(angle) * force;
+                    }
+                }
+
+                // 粒子同士の当たり判定（大きめ）
+                const collisionDist = 18;
+                for (let j = index + 1; j < particles.length; j++) {
+                    const other = particles[j];
+                    const dx = this.x - other.x;
+                    const dy = this.y - other.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < collisionDist) {
+                        // const force = (collisionDist - dist) * 0.04;
+                        const force = (collisionDist - dist) * 0.01;
+                        const angle = Math.atan2(dy, dx);
+                        this.vx += Math.cos(angle) * force;
+                        this.vy += Math.sin(angle) * force;
+                        other.vx -= Math.cos(angle) * force;
+                        other.vy -= Math.sin(angle) * force;
+                    }
+                }
+                const g = getGravity();
+                this.vx += g.x;
+                this.vy += g.y;
+                this.x += this.vx;
+                this.y += this.vy;
+                // 左右の壁で反射
+                if (this.x < this.radius) {
+                    this.vx *= -0.8;
+                    this.x = this.radius;
+                }
+                if (this.x > canvas.width - this.radius) {
+                    this.vx *= -0.8;
+                    this.x = canvas.width - this.radius;
+                }
+                // 上の壁で反射
+                if (this.y < this.radius) {
+                    this.vy *= -0.8;
+                    this.y = this.radius;
+                }
+                // 底で反射
+                if (this.y > canvas.height - this.radius) {
+                    this.vy *= -0.3;
+                    this.y = canvas.height - this.radius;
+                }
+            }
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius * 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles.length = 0;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * 100;
+                particles.push(new Particle(x, y));
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // メタボール風描画
+            const metaResolution = 4;
+            const threshold = 1.0;
+            ctx.save();
+            ctx.globalAlpha = 1.0;
+            for (let y = 0; y < canvas.height; y += metaResolution) {
+                for (let x = 0; x < canvas.width; x += metaResolution) {
+                    let field = 0;
+                    for (let i = 0; i < particles.length; i++) {
+                        const p = particles[i];
+                        const dx = x - p.x;
+                        const dy = y - p.y;
+                        const r = p.radius * 2.5;
+                        field += r * r / (dx * dx + dy * dy + 1);
+                    }
+                    if (field > threshold) {
+                        ctx.fillStyle = '#66ccff';
+                        ctx.fillRect(x, y, metaResolution, metaResolution);
+                    }
+                }
+            }
+            ctx.restore();
+            // 粒子描画・物理更新
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update(i);
+                // パーティクルは非表示
+                // particles[i].draw(ctx);
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // ドラッグ＆ドロップで重力方向を回転
+        let dragStart = null;
+        function setGravityByDrag(start, end) {
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            if (dx !== 0 || dy !== 0) {
+                gravityAngle = Math.atan2(dy, dx);
+            }
+        }
+
+        // マウス
+        canvas.addEventListener('mousedown', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        });
+        canvas.addEventListener('mousemove', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+            if (dragStart) {
+                setGravityByDrag(dragStart, { x: mouse.x, y: mouse.y });
+            }
+        });
+        canvas.addEventListener('mouseup', function(e) {
+            dragStart = null;
+        });
+        canvas.addEventListener('mouseleave', function() {
+            mouse.x = null;
+            mouse.y = null;
+            dragStart = null;
+        });
+
+        // タッチ
+        canvas.addEventListener('touchstart', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            if (e.touches.length > 0) {
+                dragStart = {
+                    x: e.touches[0].clientX - rect.left,
+                    y: e.touches[0].clientY - rect.top
+                };
+            }
+        }, { passive: false });
+        canvas.addEventListener('touchmove', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            if (e.touches.length > 0) {
+                mouse.x = e.touches[0].clientX - rect.left;
+                mouse.y = e.touches[0].clientY - rect.top;
+                if (dragStart) {
+                    setGravityByDrag(dragStart, { x: mouse.x, y: mouse.y });
+                }
+            }
+        }, { passive: false });
+        canvas.addEventListener('touchend', function() {
+            mouse.x = null;
+            mouse.y = null;
+            dragStart = null;
+        });
+
+        initParticles();
+        animate();
+    </script>
+</body>
+</html>
