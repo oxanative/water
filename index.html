@@ -31,6 +31,7 @@
         };
     }
     const PARTICLE_COUNT = 220;
+    // const PARTICLE_COUNT = 150;
     let mouse = { x: null, y: null };
 
 
@@ -83,21 +84,21 @@
                 this.y += this.vy;
                 // 左右の壁で反射
                 if (this.x < this.radius) {
-                    this.vx *= -0.8;
+                    this.vx *= -0.1;
                     this.x = this.radius;
                 }
                 if (this.x > canvas.width - this.radius) {
-                    this.vx *= -0.8;
+                    this.vx *= -0.1;
                     this.x = canvas.width - this.radius;
                 }
                 // 上の壁で反射
                 if (this.y < this.radius) {
-                    this.vy *= -0.8;
+                    this.vy *= -0.1;
                     this.y = this.radius;
                 }
                 // 底で反射
                 if (this.y > canvas.height - this.radius) {
-                    this.vy *= -0.3;
+                    this.vy *= -0.1;
                     this.y = canvas.height - this.radius;
                 }
             }
@@ -122,9 +123,9 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             // メタボール風描画
             const metaResolution = 4;
-            const threshold = 1.0;
+            // const threshold = 1.0;
+            const threshold = 0.5;
             ctx.save();
-            ctx.globalAlpha = 1.0;
             for (let y = 0; y < canvas.height; y += metaResolution) {
                 for (let x = 0; x < canvas.width; x += metaResolution) {
                     let field = 0;
@@ -132,11 +133,15 @@
                         const p = particles[i];
                         const dx = x - p.x;
                         const dy = y - p.y;
-                        const r = p.radius * 2.5;
+                        // const r = p.radius * 2.5;
+                        const r = p.radius * 3.5;
                         field += r * r / (dx * dx + dy * dy + 1);
                     }
                     if (field > threshold) {
-                        ctx.fillStyle = '#66ccff';
+                        // パーティクルが1つの時はさらに薄く
+                        let min = particles.length === 1 ? 0.01 : 0.05;
+                        let alpha = Math.min(1, Math.max(min, (field - threshold) * (1 - min) + min));
+                        ctx.fillStyle = `rgba(102, 204, 255, ${alpha})`;
                         ctx.fillRect(x, y, metaResolution, metaResolution);
                     }
                 }
@@ -177,6 +182,14 @@
         canvas.addEventListener('mouseup', function(e) {
             dragStart = null;
         });
+
+        // マウスクリックでその場所にメタボールを追加
+        canvas.addEventListener('click', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            particles.push(new Particle(x, y));
+        });
         canvas.addEventListener('mouseleave', function() {
             mouse.x = null;
             mouse.y = null;
@@ -191,6 +204,10 @@
                     x: e.touches[0].clientX - rect.left,
                     y: e.touches[0].clientY - rect.top
                 };
+                // タッチした場所にメタボール追加
+                const x = e.touches[0].clientX - rect.left;
+                const y = e.touches[0].clientY - rect.top;
+                particles.push(new Particle(x, y));
             }
         }, { passive: false });
         canvas.addEventListener('touchmove', function(e) {
